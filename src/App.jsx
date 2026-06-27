@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 const STORAGE_KEY = "gym-tracker-workouts";
+const TEMPLATES_STORAGE_KEY = "gym-tracker-templates";
 
 function createSet() {
   return { id: crypto.randomUUID(), weight: "", reps: "" };
@@ -8,6 +9,10 @@ function createSet() {
 
 function createExercise() {
   return { id: crypto.randomUUID(), name: "", sets: [createSet()] };
+}
+
+function createTemplateExercise() {
+  return { id: crypto.randomUUID(), name: "" };
 }
 
 function formatDate(dateString) {
@@ -23,6 +28,17 @@ function formatDate(dateString) {
 function getInitialWorkouts() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function getInitialTemplates() {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -185,13 +201,20 @@ function getExerciseAnalytics(workouts, exerciseName) {
 
 function App() {
   const [workouts, setWorkouts] = useState(() => getInitialWorkouts());
+  const [templates, setTemplates] = useState(() => getInitialTemplates());
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
   const [view, setView] = useState("dashboard");
   const [selectedExercise, setSelectedExercise] = useState("");
   const [workoutName, setWorkoutName] = useState("");
   const [workoutDate, setWorkoutDate] = useState("");
   const [exercises, setExercises] = useState([createExercise()]);
   const [autocompleteExerciseId, setAutocompleteExerciseId] = useState(null);
+  const [workoutNotes, setWorkoutNotes] = useState("");
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
+  const [templateName, setTemplateName] = useState("");
+  const [templateExercises, setTemplateExercises] = useState([createTemplateExercise()]);
+  const [templateAutocompleteExerciseId, setTemplateAutocompleteExerciseId] = useState(null);
 
   const sortedWorkouts = useMemo(
     () =>
@@ -208,7 +231,21 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nextWorkouts));
   };
 
+  const persistTemplates = (nextTemplates) => {
+    setTemplates(nextTemplates);
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
+  };
+
   const uniqueExercises = useMemo(() => getUniqueExerciseNames(workouts), [workouts]);
+
+  const stats = useMemo(() => {
+    const totalExercises = workouts.reduce((sum, workout) => sum + workout.exercises.length, 0);
+    return {
+      totalWorkouts: workouts.length,
+      totalExercises,
+      totalTemplates: templates.length,
+    };
+  }, [workouts, templates]);
 
   const selectedExerciseEntries = useMemo(() => {
     if (!selectedExercise) return [];
@@ -262,11 +299,27 @@ function App() {
     persistWorkouts(nextWorkouts);
   };
 
+  const deleteTemplate = (templateId) => {
+    const shouldDelete = window.confirm("Are you sure you want to delete this template?");
+    if (!shouldDelete) return;
+
+    const nextTemplates = templates.filter((template) => template.id !== templateId);
+    persistTemplates(nextTemplates);
+  };
+
   const resetForm = () => {
     setWorkoutName("");
     setWorkoutDate("");
     setExercises([createExercise()]);
     setAutocompleteExerciseId(null);
+    setWorkoutNotes("");
+    setEditingWorkoutId(null);
+  };
+
+  const resetTemplateForm = () => {
+    setTemplateName("");
+    setTemplateExercises([createTemplateExercise()]);
+    setTemplateAutocompleteExerciseId(null);
   };
 
   const clearAllData = () => {
@@ -276,7 +329,9 @@ function App() {
     if (!shouldClear) return;
 
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TEMPLATES_STORAGE_KEY);
     setWorkouts([]);
+    setTemplates([]);
     resetForm();
     setIsCreating(false);
     setView("dashboard");
@@ -287,8 +342,20 @@ function App() {
     setExercises((prev) => [...prev, createExercise()]);
   };
 
+  const addTemplateExercise = () => {
+    setTemplateExercises((prev) => [...prev, createTemplateExercise()]);
+  };
+
   const updateExerciseName = (exerciseId, value) => {
     setExercises((prev) =>
+      prev.map((exercise) =>
+        exercise.id === exerciseId ? { ...exercise, name: value } : exercise
+      )
+    );
+  };
+
+  const updateTemplateExerciseName = (exerciseId, value) => {
+    setTemplateExercises((prev) =>
       prev.map((exercise) =>
         exercise.id === exerciseId ? { ...exercise, name: value } : exercise
       )
@@ -337,10 +404,36 @@ function App() {
     });
   };
 
+  const moveExerciseUp = (index) => {
+    if (index === 0) return;
+    setExercises((prev) => {
+      const newExercises = [...prev];
+      [newExercises[index - 1], newExercises[index]] = [newExercises[index], newExercises[index - 1]];
+      return newExercises;
+    });
+  };
+
+  const moveExerciseDown = (index) => {
+    if (index === exercises.length - 1) return;
+    setExercises((prev) => {
+      const newExercises = [...prev];
+      [newExercises[index], newExercises[index + 1]] = [newExercises[index + 1], newExercises[index]];
+      return newExercises;
+    });
+  };
+
+  const removeTemplateExercise = (exerciseId) => {
+    setTemplateExercises((prev) => {
+      const remaining = prev.filter((exercise) => exercise.id !== exerciseId);
+      return remaining.length ? remaining : [createTemplateExercise()];
+    });
+  };
+
   const handleSaveWorkout = (event) => {
     event.preventDefault();
 
     const trimmedName = workoutName.trim();
+    const trimmedNotes = workoutNotes.trim();
     const validExercises = exercises
       .map((exercise) => ({
         ...exercise,
@@ -362,11 +455,10 @@ function App() {
       return;
     }
 
-    const newWorkout = {
-      id: crypto.randomUUID(),
+    const workoutData = {
       name: trimmedName,
       date: workoutDate,
-      createdAt: Date.now(),
+      notes: trimmedNotes,
       exercises: validExercises.map((exercise) => ({
         id: exercise.id,
         name: exercise.name,
@@ -378,9 +470,95 @@ function App() {
       })),
     };
 
-    persistWorkouts([newWorkout, ...workouts]);
+    if (editingWorkoutId) {
+      const updatedWorkouts = workouts.map((workout) =>
+        workout.id === editingWorkoutId
+          ? { ...workout, ...workoutData }
+          : workout
+      );
+      persistWorkouts(updatedWorkouts);
+    } else {
+      const newWorkout = {
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        ...workoutData,
+      };
+      persistWorkouts([newWorkout, ...workouts]);
+    }
+
     resetForm();
     setIsCreating(false);
+  };
+
+  const handleSaveTemplate = (event) => {
+    event.preventDefault();
+
+    const trimmedName = templateName.trim();
+    const validExercises = templateExercises
+      .map((exercise) => ({
+        ...exercise,
+        name: exercise.name.trim(),
+      }))
+      .filter((exercise) => exercise.name !== "");
+
+    if (!trimmedName || validExercises.length === 0) {
+      window.alert("Please enter template name and at least one exercise.");
+      return;
+    }
+
+    const newTemplate = {
+      id: crypto.randomUUID(),
+      name: trimmedName,
+      exercises: validExercises.map((exercise) => ({
+        id: exercise.id,
+        name: exercise.name,
+      })),
+    };
+
+    persistTemplates([newTemplate, ...templates]);
+    resetTemplateForm();
+    setIsCreatingTemplate(false);
+  };
+
+  const applyTemplate = (template) => {
+    const hasExistingExercises = exercises.some(
+      (exercise) => exercise.name.trim() !== ""
+    );
+
+    if (hasExistingExercises) {
+      const shouldReplace = window.confirm(
+        "This will replace your current exercises. Continue?"
+      );
+      if (!shouldReplace) return;
+    }
+
+    const newExercises = template.exercises.map((exercise) => ({
+      id: crypto.randomUUID(),
+      name: exercise.name,
+      sets: [createSet()],
+    }));
+
+    setExercises(newExercises);
+    setWorkoutName(template.name);
+  };
+
+  const editWorkout = (workout) => {
+    setEditingWorkoutId(workout.id);
+    setWorkoutName(workout.name);
+    setWorkoutDate(workout.date);
+    setWorkoutNotes(workout.notes || "");
+    setExercises(
+      workout.exercises.map((exercise) => ({
+        id: crypto.randomUUID(),
+        name: exercise.name,
+        sets: exercise.sets.map((set) => ({
+          id: crypto.randomUUID(),
+          weight: set.weight,
+          reps: set.reps,
+        })),
+      }))
+    );
+    setIsCreating(true);
   };
 
   if (view === "history") {
@@ -528,15 +706,198 @@ function App() {
     );
   }
 
+  if (view === "templates") {
+    return (
+      <div className="page">
+        <div className="container">
+          <header className="header">
+            <div>
+              <h1>Workout Templates</h1>
+              <p>Save and reuse your workout routines.</p>
+            </div>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setView("dashboard");
+                setIsCreatingTemplate(false);
+                resetTemplateForm();
+              }}
+            >
+              Back
+            </button>
+          </header>
+
+          <section className="card">
+            <div className="card-header">
+              <h2>Saved Templates</h2>
+            </div>
+            {templates.length === 0 ? (
+              <p className="empty-state">No templates saved yet. Create one to get started.</p>
+            ) : (
+              <div className="workout-list">
+                {templates.map((template) => (
+                  <article key={template.id} className="workout-item">
+                    <div className="workout-top">
+                      <div className="workout-heading">
+                        <h3>{template.name}</h3>
+                        <time>{template.exercises.length} exercise{template.exercises.length !== 1 ? "s" : ""}</time>
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost-button danger"
+                        onClick={() => deleteTemplate(template.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <ul className="exercise-summary">
+                      {template.exercises.map((exercise) => (
+                        <li key={exercise.id}>
+                          <strong>{exercise.name}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="card">
+            <div className="card-header">
+              <h2>Create Template</h2>
+            </div>
+            {!isCreatingTemplate ? (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setIsCreatingTemplate(true)}
+              >
+                New Template
+              </button>
+            ) : (
+              <form onSubmit={handleSaveTemplate} className="form-grid">
+                <label>
+                  Template Name
+                  <input
+                    type="text"
+                    placeholder="Push A"
+                    value={templateName}
+                    onChange={(event) => setTemplateName(event.target.value)}
+                    required
+                  />
+                </label>
+
+                <div className="exercise-section">
+                  <h3>Exercises</h3>
+                  {templateExercises.map((exercise, index) => {
+                    const exerciseSuggestions = getMatchingExerciseSuggestions(
+                      uniqueExercises,
+                      exercise.name
+                    );
+                    const showExerciseAutocomplete =
+                      templateAutocompleteExerciseId === exercise.id && exerciseSuggestions.length > 0;
+
+                    return (
+                      <div key={exercise.id} className="exercise-card">
+                        <div className="exercise-header">
+                          <h4>Exercise {index + 1}</h4>
+                          <button
+                            type="button"
+                            className="ghost-button danger"
+                            onClick={() => removeTemplateExercise(exercise.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        <label>
+                          Exercise Name
+                          <div className="autocomplete-field">
+                            <input
+                              type="text"
+                              placeholder="Bench Press"
+                              value={exercise.name}
+                              autoComplete="off"
+                              onChange={(event) => updateTemplateExerciseName(exercise.id, event.target.value)}
+                              onFocus={() => setTemplateAutocompleteExerciseId(exercise.id)}
+                              onBlur={() => {
+                                window.setTimeout(() => setTemplateAutocompleteExerciseId(null), 150);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter" || !exerciseSuggestions.length) return;
+
+                                event.preventDefault();
+                                updateTemplateExerciseName(exercise.id, exerciseSuggestions[0]);
+                              }}
+                            />
+                            {showExerciseAutocomplete && (
+                              <ul className="autocomplete-dropdown" role="listbox">
+                                {exerciseSuggestions.map((suggestion) => (
+                                  <li key={suggestion}>
+                                    <button
+                                      type="button"
+                                      className="autocomplete-option"
+                                      role="option"
+                                      onMouseDown={(event) => {
+                                        event.preventDefault();
+                                        updateTemplateExerciseName(exercise.id, suggestion);
+                                        setTemplateAutocompleteExerciseId(null);
+                                      }}
+                                    >
+                                      {suggestion}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                    );
+                  })}
+
+                  <button type="button" className="ghost-button" onClick={addTemplateExercise}>
+                    + Add Exercise
+                  </button>
+                </div>
+
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      resetTemplateForm();
+                      setIsCreatingTemplate(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary-button">
+                    Save Template
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <div className="container">
         <header className="header">
           <div>
-            <h1>Adhiraj's Gym Tracker</h1>
-            <p>Track every session and keep your progress in one place.</p>
+            <h1>Venato</h1>
+            <p>Track every workout. Progress with purpose.</p>
           </div>
           <div className="header-actions">
+            <button type="button" className="ghost-button" onClick={() => setView("templates")}>
+              Templates
+            </button>
             <button type="button" className="ghost-button" onClick={() => setView("history")}>
               Exercise History
             </button>
@@ -548,10 +909,27 @@ function App() {
           </div>
         </header>
 
+        <section className="stats-section">
+          <div className="stats-grid">
+            <div className="stat-card">
+              <p className="stat-value">{stats.totalWorkouts}</p>
+              <p className="stat-label">Total Workouts</p>
+            </div>
+            <div className="stat-card">
+              <p className="stat-value">{stats.totalExercises}</p>
+              <p className="stat-label">Total Exercises Trained</p>
+            </div>
+            <div className="stat-card">
+              <p className="stat-value">{stats.totalTemplates}</p>
+              <p className="stat-label">Total Templates</p>
+            </div>
+          </div>
+        </section>
+
         {isCreating && (
           <section className="card">
             <div className="card-header">
-              <h2>Create Workout</h2>
+              <h2>{editingWorkoutId ? "Edit Workout" : "Create Workout"}</h2>
             </div>
             <form onSubmit={handleSaveWorkout} className="form-grid">
               <label>
@@ -575,7 +953,30 @@ function App() {
               </label>
 
               <div className="exercise-section">
-                <h3>Exercises</h3>
+                <div className="exercise-header">
+                  <h3>Exercises</h3>
+                  {templates.length > 0 && (
+                    <div className="template-selector">
+                      <select
+                        value=""
+                        onChange={(event) => {
+                          if (event.target.value) {
+                            const template = templates.find((t) => t.id === event.target.value);
+                            if (template) applyTemplate(template);
+                          }
+                        }}
+                        className="template-select"
+                      >
+                        <option value="">Use Template...</option>
+                        {templates.map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
                 {exercises.map((exercise, index) => {
                   const exerciseSuggestions = getMatchingExerciseSuggestions(
                     uniqueExercises,
@@ -593,13 +994,33 @@ function App() {
                   <div key={exercise.id} className="exercise-card">
                     <div className="exercise-header">
                       <h4>Exercise {index + 1}</h4>
-                      <button
-                        type="button"
-                        className="ghost-button danger"
-                        onClick={() => removeExercise(exercise.id)}
-                      >
-                        Remove Exercise
-                      </button>
+                      <div className="exercise-actions">
+                        <button
+                          type="button"
+                          className="ghost-button reorder-button"
+                          onClick={() => moveExerciseUp(index)}
+                          disabled={index === 0}
+                          title="Move Up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button reorder-button"
+                          onClick={() => moveExerciseDown(index)}
+                          disabled={index === exercises.length - 1}
+                          title="Move Down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button danger"
+                          onClick={() => removeExercise(exercise.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
 
                     <label>
@@ -743,6 +1164,16 @@ function App() {
                 </button>
               </div>
 
+              <label>
+                Notes
+                <textarea
+                  placeholder="Optional notes about this workout..."
+                  value={workoutNotes}
+                  onChange={(event) => setWorkoutNotes(event.target.value)}
+                  rows={3}
+                />
+              </label>
+
               <div className="actions">
                 <button
                   type="button"
@@ -755,7 +1186,7 @@ function App() {
                   Cancel
                 </button>
                 <button type="submit" className="primary-button">
-                  Save Workout
+                  {editingWorkoutId ? "Update Workout" : "Save Workout"}
                 </button>
               </div>
             </form>
@@ -777,13 +1208,22 @@ function App() {
                       <h3>{workout.name}</h3>
                       <time>{formatDate(workout.date)}</time>
                     </div>
-                    <button
-                      type="button"
-                      className="ghost-button danger"
-                      onClick={() => deleteWorkout(workout.id)}
-                    >
-                      Delete Workout
-                    </button>
+                    <div className="workout-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => editWorkout(workout)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button danger"
+                        onClick={() => deleteWorkout(workout.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                   <ul className="exercise-summary">
                     {workout.exercises.map((exercise) => (
@@ -797,6 +1237,12 @@ function App() {
                       </li>
                     ))}
                   </ul>
+                  {workout.notes && (
+                    <div className="workout-notes">
+                      <p className="workout-notes-label">Notes</p>
+                      <p className="workout-notes-text">{workout.notes}</p>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
