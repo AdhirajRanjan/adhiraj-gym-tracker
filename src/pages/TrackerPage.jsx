@@ -8,6 +8,7 @@ import {
 } from "../lib/analytics.js";
 import { Dashboard } from "../components/Dashboard.jsx";
 import { ExerciseHistoryView } from "../components/ExerciseHistoryView.jsx";
+import { SettingsView } from "../components/SettingsView.jsx";
 import { TemplatesView } from "../components/TemplatesView.jsx";
 
 export function TrackerPage() {
@@ -134,11 +135,6 @@ export function TrackerPage() {
   };
 
   const clearAllData = () => {
-    const shouldClear = window.confirm(
-      "This will permanently delete all workout data. Continue?"
-    );
-    if (!shouldClear) return;
-
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TEMPLATES_STORAGE_KEY);
     setWorkouts([]);
@@ -420,6 +416,15 @@ export function TrackerPage() {
     );
   }
 
+  if (view === "settings") {
+    return (
+      <SettingsView
+        onBack={() => setView("dashboard")}
+        onClearAllData={clearAllData}
+      />
+    );
+  }
+
   return (
     <Dashboard
       stats={stats}
@@ -457,7 +462,6 @@ export function TrackerPage() {
       }}
       onEditWorkout={editWorkout}
       onDeleteWorkout={deleteWorkout}
-      onClearAllData={clearAllData}
     />
   );
 }

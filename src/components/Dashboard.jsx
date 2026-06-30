@@ -36,7 +36,6 @@ export function Dashboard({
   onCancelWorkout,
   onEditWorkout,
   onDeleteWorkout,
-  onClearAllData,
 }) {
   return (
     <div className="page">
@@ -100,11 +99,6 @@ export function Dashboard({
           )}
         </section>
 
-        <section className="dev-tools">
-          <button type="button" className="danger-button" onClick={onClearAllData}>
-            Clear All Data
-          </button>
-        </section>
       </div>
     </div>
   );

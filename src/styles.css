@@ -443,12 +443,6 @@ button:active {
   border-color: #7b2b3b;
 }
 
-.dev-tools {
-  display: flex;
-  justify-content: center;
-  padding-top: 4px;
-}
-
 .danger-button {
   background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   border-color: #ef4444;
@@ -650,6 +644,110 @@ button:active {
   color: #9ca3af;
 }
 
+.settings-container {
+  max-width: 860px;
+}
+
+.settings-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  background: linear-gradient(180deg, #161b24 0%, #131922 100%);
+  border: 1px solid #242d3d;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 16px 34px rgba(4, 7, 12, 0.45);
+}
+
+.settings-section-copy {
+  display: grid;
+  gap: 8px;
+  max-width: 580px;
+}
+
+.settings-section-copy h2 {
+  font-size: 1.08rem;
+  color: #f9fafb;
+}
+
+.settings-section-copy p {
+  color: #9ca3af;
+  line-height: 1.6;
+}
+
+.settings-danger-section {
+  border-color: #4a2630;
+  background: linear-gradient(180deg, #1a151d 0%, #15121a 100%);
+}
+
+.settings-danger-button {
+  flex: 0 0 auto;
+}
+
+.settings-future-note {
+  color: #6b7280;
+  font-size: 0.92rem;
+  text-align: center;
+  padding: 12px 0 4px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 7, 12, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.confirmation-modal {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 22px;
+  background: linear-gradient(180deg, #171b24 0%, #121720 100%);
+  border: 1px solid #314057;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 28px 70px rgba(0, 0, 0, 0.58);
+}
+
+.confirmation-modal-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.confirmation-eyebrow {
+  color: #fca5a5;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.confirmation-modal h2 {
+  color: #f9fafb;
+  font-size: 1.35rem;
+}
+
+.confirmation-modal p {
+  color: #9ca3af;
+  line-height: 1.6;
+}
+
+.confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 700px) {
   .page {
     padding: 24px 14px 36px;
@@ -695,6 +793,15 @@ button:active {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+
+  .settings-section {
+    flex-direction: column;
+  }
+
+  .settings-danger-button,
+  .confirmation-actions button {
+    width: 100%;
   }
 }
 

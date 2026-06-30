@@ -20,6 +20,13 @@ export function Header({ onViewChange, currentView, isCreating, onNewWorkout }) 
         >
           Exercise History
         </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => onViewChange("settings")}
+        >
+          Settings
+        </button>
         {!isCreating && (
           <button className="primary-button" onClick={onNewWorkout}>
             New Workout
