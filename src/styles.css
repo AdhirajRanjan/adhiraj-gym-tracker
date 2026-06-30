@@ -131,7 +131,7 @@ input {
   border: 1px solid #2e3a4d;
   border-radius: 10px;
   padding: 11px 12px;
-  font-size: 0.95rem;
+  font-size: 16px;
   color: #f3f4f6;
   background: #0f1522;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
@@ -142,7 +142,7 @@ textarea {
   border: 1px solid #2e3a4d;
   border-radius: 10px;
   padding: 11px 12px;
-  font-size: 0.95rem;
+  font-size: 16px;
   color: #f3f4f6;
   background: #0f1522;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
@@ -225,7 +225,7 @@ input:focus {
   border: 1px solid #2e3a4d;
   border-radius: 10px;
   padding: 9px 12px;
-  font-size: 0.92rem;
+  font-size: 16px;
   color: #f3f4f6;
   background: #0f1522;
   cursor: pointer;
@@ -750,35 +750,163 @@ button:active {
 
 @media (max-width: 700px) {
   .page {
-    padding: 24px 14px 36px;
+    padding: 20px 12px 32px;
+  }
+
+  .container {
+    gap: 14px;
+  }
+
+  .header {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .header h1 {
+    font-size: 1.75rem;
+  }
+
+  .header p {
+    font-size: 0.95rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    gap: 7px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .header-actions .ghost-button,
+  .header-actions .primary-button {
+    min-height: 42px;
+    padding: 7px 11px;
+  }
+
+  .stats-section {
+    margin-bottom: 18px;
+  }
+
+  .stats-grid {
+    gap: 10px;
+  }
+
+  .stat-card {
+    min-height: 0;
+    padding: 10px;
+    gap: 2px;
+  }
+
+  .stat-value {
+    font-size: 1.45rem;
+    line-height: 1.05;
+  }
+
+  .stat-label {
+    font-size: 0.76rem;
+    line-height: 1.25;
   }
 
   .card {
-    padding: 16px;
+    padding: 14px;
+  }
+
+  .card-header {
+    margin-bottom: 14px;
+  }
+
+  .form-grid,
+  .exercise-section {
+    gap: 12px;
+  }
+
+  label {
+    gap: 6px;
+  }
+
+  input,
+  textarea,
+  .template-select {
+    min-height: 44px;
+    padding: 9px 11px;
+  }
+
+  textarea {
+    min-height: 92px;
+  }
+
+  .exercise-card {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .exercise-header {
+    gap: 10px;
+  }
+
+  .exercise-actions {
+    gap: 6px;
+  }
+
+  .exercise-actions .ghost-button {
+    min-height: 42px;
+    padding: 7px 10px;
+  }
+
+  .reorder-button {
+    min-width: 42px;
+  }
+
+  .autocomplete-option {
+    min-height: 42px;
+  }
+
+  .previous-performance-card,
+  .training-suggestion-card {
+    padding: 12px;
+  }
+
+  .previous-performance-sets,
+  .training-suggestion-sets {
+    gap: 3px;
+    margin-top: 4px;
+  }
+
+  .sets-list {
+    gap: 8px;
   }
 
   .set-row {
     grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-items: end;
   }
 
   .set-row span {
     grid-column: 1 / -1;
+    font-size: 0.84rem;
   }
 
   .set-row button {
     grid-column: 1 / -1;
-    width: fit-content;
+    width: 100%;
+    min-height: 42px;
+    padding: 8px 12px;
+  }
+
+  .actions {
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .actions .ghost-button,
+  .actions .primary-button {
+    min-height: 44px;
   }
 
   .workout-top {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
   }
 
   .pr-grid {
