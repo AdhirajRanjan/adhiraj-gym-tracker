@@ -1,7 +1,23 @@
 import { useState } from "react";
 
-export function SettingsView({ onBack, onClearAllData }) {
+function getUserDisplayName(user) {
+  return (
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email ||
+    "Venato user"
+  );
+}
+
+function getUserAvatarUrl(user) {
+  return user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "";
+}
+
+export function SettingsView({ auth, onBack, onClearAllData }) {
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+  const userName = getUserDisplayName(auth.user);
+  const userEmail = auth.user?.email || "";
+  const userAvatarUrl = getUserAvatarUrl(auth.user);
 
   const closeConfirmation = () => {
     setIsConfirmingClear(false);
@@ -24,6 +40,68 @@ export function SettingsView({ onBack, onClearAllData }) {
             Back
           </button>
         </header>
+
+        <section className="settings-section">
+          <div className="settings-section-copy">
+            <h2>Account</h2>
+            {auth.user ? (
+              <div className="account-profile">
+                {userAvatarUrl ? (
+                  <img className="account-avatar" src={userAvatarUrl} alt="" />
+                ) : (
+                  <div className="account-avatar account-avatar-fallback" aria-hidden="true">
+                    {userName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="account-details">
+                  <strong>{userName}</strong>
+                  {userEmail && <span>{userEmail}</span>}
+                </div>
+              </div>
+            ) : (
+              <p>
+                Sign in to prepare Venato for cloud sync across your devices.
+                Your workouts will continue to stay on this device for now.
+              </p>
+            )}
+            {!auth.user && !auth.isAuthConfigured && (
+              <p className="settings-auth-message">
+                Sign in is unavailable in this environment.
+              </p>
+            )}
+            {auth.authError && (
+              <p className="settings-auth-message">{auth.authError}</p>
+            )}
+          </div>
+
+          {auth.user ? (
+            <button
+              type="button"
+              className="ghost-button settings-account-action"
+              onClick={auth.signOut}
+              disabled={auth.isAuthActionPending}
+            >
+              {auth.isAuthActionPending ? "Signing Out..." : "Sign Out"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="primary-button settings-account-action"
+              onClick={auth.signIn}
+              disabled={
+                auth.isAuthLoading ||
+                auth.isAuthActionPending ||
+                !auth.isAuthConfigured
+              }
+            >
+              {auth.isAuthLoading
+                ? "Checking Account..."
+                : auth.isAuthActionPending
+                  ? "Opening Google..."
+                  : "Sign in with Google"}
+            </button>
+          )}
+        </section>
 
         <section className="settings-section">
           <div className="settings-section-copy">

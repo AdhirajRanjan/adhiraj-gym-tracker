@@ -1,12 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
-import { assertSupabaseConfig, supabaseConfig } from "./config.js";
+import { assertSupabaseConfig, hasSupabaseConfig, supabaseConfig } from "./config.js";
 
-assertSupabaseConfig();
+export const supabase = hasSupabaseConfig()
+  ? createClient(supabaseConfig.url, supabaseConfig.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    })
+  : null;
 
-export const supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export function getSupabaseClient() {
+  assertSupabaseConfig();
+  return supabase;
+}

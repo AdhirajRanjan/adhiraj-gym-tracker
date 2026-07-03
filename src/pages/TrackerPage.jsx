@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { STORAGE_KEY, TEMPLATES_STORAGE_KEY } from "../lib/constants.js";
 import { createSet, createExercise, createTemplateExercise } from "../lib/factories.js";
 import { getInitialWorkouts, getInitialTemplates } from "../lib/storage.js";
+import { useAuthSession } from "../hooks/useAuthSession.js";
 import {
   getUniqueExerciseNames,
   getExerciseAnalytics,
@@ -12,6 +13,7 @@ import { SettingsView } from "../components/SettingsView.jsx";
 import { TemplatesView } from "../components/TemplatesView.jsx";
 
 export function TrackerPage() {
+  const auth = useAuthSession();
   const [workouts, setWorkouts] = useState(() => getInitialWorkouts());
   const [templates, setTemplates] = useState(() => getInitialTemplates());
   const [isCreating, setIsCreating] = useState(false);
@@ -419,6 +421,7 @@ export function TrackerPage() {
   if (view === "settings") {
     return (
       <SettingsView
+        auth={auth}
         onBack={() => setView("dashboard")}
         onClearAllData={clearAllData}
       />
