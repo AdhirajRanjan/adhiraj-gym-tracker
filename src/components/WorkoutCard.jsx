@@ -1,6 +1,6 @@
 import { formatDate } from "../lib/formatters.js";
 
-export function WorkoutCard({ workout, onEdit, onDelete }) {
+export function WorkoutCard({ workout, onEdit, onDelete, isDeleting = false }) {
   return (
     <article key={workout.id} className="workout-item">
       <div className="workout-top">
@@ -13,6 +13,7 @@ export function WorkoutCard({ workout, onEdit, onDelete }) {
             type="button"
             className="ghost-button"
             onClick={() => onEdit(workout)}
+            disabled={isDeleting}
           >
             Edit
           </button>
@@ -20,8 +21,9 @@ export function WorkoutCard({ workout, onEdit, onDelete }) {
             type="button"
             className="ghost-button danger"
             onClick={() => onDelete(workout.id)}
+            disabled={isDeleting}
           >
-            Delete
+            {isDeleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>

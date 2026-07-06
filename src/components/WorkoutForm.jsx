@@ -31,6 +31,7 @@ export function WorkoutForm({
   onApplyTemplate,
   onSubmit,
   onCancel,
+  isSubmitting = false,
 }) {
   return (
     <section className="card">
@@ -283,11 +284,16 @@ export function WorkoutForm({
             type="button"
             className="ghost-button"
             onClick={onCancel}
+            disabled={isSubmitting}
           >
             Cancel
           </button>
-          <button type="submit" className="primary-button">
-            {editingWorkoutId ? "Update Workout" : "Save Workout"}
+          <button type="submit" className="primary-button" disabled={isSubmitting}>
+            {isSubmitting
+              ? "Saving..."
+              : editingWorkoutId
+                ? "Update Workout"
+                : "Save Workout"}
           </button>
         </div>
       </form>

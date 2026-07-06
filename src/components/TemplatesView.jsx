@@ -7,6 +7,10 @@ export function TemplatesView({
   templateAutocompleteExerciseId,
   isCreatingTemplate,
   uniqueExercises,
+  dataError,
+  isDataLoading,
+  isSavingTemplate,
+  deletingTemplateId,
   onTemplateNameChange,
   onTemplateExerciseNameChange,
   onAddTemplateExercise,
@@ -36,6 +40,12 @@ export function TemplatesView({
           </button>
         </header>
 
+        {(isDataLoading || dataError) && (
+          <p className={`data-status ${dataError ? "error" : ""}`}>
+            {dataError || "Loading cloud data..."}
+          </p>
+        )}
+
         <section className="card">
           <div className="card-header">
             <h2>Saved Templates</h2>
@@ -55,8 +65,9 @@ export function TemplatesView({
                       type="button"
                       className="ghost-button danger"
                       onClick={() => onDeleteTemplate(template.id)}
+                      disabled={deletingTemplateId === template.id}
                     >
-                      Delete
+                      {deletingTemplateId === template.id ? "Deleting..." : "Delete"}
                     </button>
                   </div>
                   <ul className="exercise-summary">
@@ -176,11 +187,12 @@ export function TemplatesView({
                   type="button"
                   className="ghost-button"
                   onClick={onCancelTemplate}
+                  disabled={isSavingTemplate}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="primary-button">
-                  Save Template
+                <button type="submit" className="primary-button" disabled={isSavingTemplate}>
+                  {isSavingTemplate ? "Saving..." : "Save Template"}
                 </button>
               </div>
             </form>

@@ -21,3 +21,7 @@ export function getInitialTemplates() {
     return [];
   }
 }
+
+export function hasStoredLocalTrainingData() {
+  return getInitialWorkouts().length > 0 || getInitialTemplates().length > 0;
+}

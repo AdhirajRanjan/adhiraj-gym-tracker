@@ -16,6 +16,10 @@ export function Dashboard({
   autocompleteExerciseId,
   sortedWorkouts,
   workouts,
+  dataError,
+  isDataLoading,
+  isSavingWorkout,
+  deletingWorkoutId,
   onViewChange,
   onNewWorkout,
   onWorkoutNameChange,
@@ -47,6 +51,12 @@ export function Dashboard({
           onNewWorkout={onNewWorkout}
         />
 
+        {(isDataLoading || dataError) && (
+          <p className={`data-status ${dataError ? "error" : ""}`}>
+            {dataError || "Loading cloud data..."}
+          </p>
+        )}
+
         <StatsCards stats={stats} />
 
         {isCreating && (
@@ -76,6 +86,7 @@ export function Dashboard({
             onApplyTemplate={onApplyTemplate}
             onSubmit={onSaveWorkout}
             onCancel={onCancelWorkout}
+            isSubmitting={isSavingWorkout}
           />
         )}
 
@@ -93,6 +104,7 @@ export function Dashboard({
                   workout={workout}
                   onEdit={onEditWorkout}
                   onDelete={onDeleteWorkout}
+                  isDeleting={deletingWorkoutId === workout.id}
                 />
               ))}
             </div>

@@ -1,8 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { STORAGE_KEY, TEMPLATES_STORAGE_KEY } from "../lib/constants.js";
 import { createSet, createExercise, createTemplateExercise } from "../lib/factories.js";
-import { getInitialWorkouts, getInitialTemplates } from "../lib/storage.js";
+import {
+  getInitialWorkouts,
+  getInitialTemplates,
+  hasStoredLocalTrainingData,
+} from "../lib/storage.js";
 import { useAuthSession } from "../hooks/useAuthSession.js";
+import {
+  fetchCloudTrainingData,
+  removeCloudTemplate,
+  removeCloudWorkout,
+  saveCloudTemplate,
+  saveCloudWorkout,
+} from "../lib/supabase/database/index.js";
 import {
   getUniqueExerciseNames,
   getExerciseAnalytics,
@@ -16,6 +27,15 @@ export function TrackerPage() {
   const auth = useAuthSession();
   const [workouts, setWorkouts] = useState(() => getInitialWorkouts());
   const [templates, setTemplates] = useState(() => getInitialTemplates());
+  const [hasLocalTrainingData, setHasLocalTrainingData] = useState(() =>
+    hasStoredLocalTrainingData()
+  );
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [dataError, setDataError] = useState("");
+  const [isSavingWorkout, setIsSavingWorkout] = useState(false);
+  const [deletingWorkoutId, setDeletingWorkoutId] = useState(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [deletingTemplateId, setDeletingTemplateId] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
   const [view, setView] = useState("dashboard");
@@ -29,6 +49,42 @@ export function TrackerPage() {
   const [templateName, setTemplateName] = useState("");
   const [templateExercises, setTemplateExercises] = useState([createTemplateExercise()]);
   const [templateAutocompleteExerciseId, setTemplateAutocompleteExerciseId] = useState(null);
+  const isCloudMode = Boolean(auth.user && !hasLocalTrainingData);
+
+  useEffect(() => {
+    if (auth.isAuthLoading) return;
+
+    if (!isCloudMode) {
+      setIsDataLoading(false);
+      setDataError("");
+      setWorkouts(getInitialWorkouts());
+      setTemplates(getInitialTemplates());
+      return;
+    }
+
+    let isActive = true;
+    setIsDataLoading(true);
+    setDataError("");
+
+    fetchCloudTrainingData(auth.user.id)
+      .then((trainingData) => {
+        if (!isActive) return;
+        setWorkouts(trainingData.workouts);
+        setTemplates(trainingData.templates);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setDataError("Unable to load cloud data. Please refresh and try again.");
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setIsDataLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [auth.isAuthLoading, auth.user?.id, isCloudMode]);
 
   const sortedWorkouts = useMemo(
     () =>
@@ -43,11 +99,13 @@ export function TrackerPage() {
   const persistWorkouts = (nextWorkouts) => {
     setWorkouts(nextWorkouts);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nextWorkouts));
+    setHasLocalTrainingData(nextWorkouts.length > 0 || templates.length > 0);
   };
 
   const persistTemplates = (nextTemplates) => {
     setTemplates(nextTemplates);
     localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
+    setHasLocalTrainingData(workouts.length > 0 || nextTemplates.length > 0);
   };
 
   const uniqueExercises = useMemo(() => getUniqueExerciseNames(workouts), [workouts]);
@@ -105,17 +163,53 @@ export function TrackerPage() {
     [workouts, selectedExercise]
   );
 
-  const deleteWorkout = (workoutId) => {
+  const deleteWorkout = async (workoutId) => {
     const shouldDelete = window.confirm("Are you sure you want to delete this workout?");
     if (!shouldDelete) return;
+
+    if (isCloudMode) {
+      setDeletingWorkoutId(workoutId);
+      setDataError("");
+
+      try {
+        await removeCloudWorkout(auth.user.id, workoutId);
+        setWorkouts((currentWorkouts) =>
+          currentWorkouts.filter((workout) => workout.id !== workoutId)
+        );
+      } catch {
+        setDataError("Unable to delete workout. Please try again.");
+      } finally {
+        setDeletingWorkoutId(null);
+      }
+
+      return;
+    }
 
     const nextWorkouts = workouts.filter((workout) => workout.id !== workoutId);
     persistWorkouts(nextWorkouts);
   };
 
-  const deleteTemplate = (templateId) => {
+  const deleteTemplate = async (templateId) => {
     const shouldDelete = window.confirm("Are you sure you want to delete this template?");
     if (!shouldDelete) return;
+
+    if (isCloudMode) {
+      setDeletingTemplateId(templateId);
+      setDataError("");
+
+      try {
+        await removeCloudTemplate(auth.user.id, templateId);
+        setTemplates((currentTemplates) =>
+          currentTemplates.filter((template) => template.id !== templateId)
+        );
+      } catch {
+        setDataError("Unable to delete template. Please try again.");
+      } finally {
+        setDeletingTemplateId(null);
+      }
+
+      return;
+    }
 
     const nextTemplates = templates.filter((template) => template.id !== templateId);
     persistTemplates(nextTemplates);
@@ -141,6 +235,7 @@ export function TrackerPage() {
     localStorage.removeItem(TEMPLATES_STORAGE_KEY);
     setWorkouts([]);
     setTemplates([]);
+    setHasLocalTrainingData(false);
     resetForm();
     setIsCreating(false);
     setView("dashboard");
@@ -238,8 +333,10 @@ export function TrackerPage() {
     });
   };
 
-  const handleSaveWorkout = (event) => {
+  const handleSaveWorkout = async (event) => {
     event.preventDefault();
+
+    if (isSavingWorkout) return;
 
     const trimmedName = workoutName.trim();
     const trimmedNotes = workoutNotes.trim();
@@ -280,6 +377,37 @@ export function TrackerPage() {
     };
 
     if (editingWorkoutId) {
+      const editedWorkout = workouts.find((workout) => workout.id === editingWorkoutId);
+      const updatedWorkout = {
+        id: editingWorkoutId,
+        createdAt: editedWorkout?.createdAt || Date.now(),
+        ...workoutData,
+      };
+
+      if (isCloudMode) {
+        setIsSavingWorkout(true);
+        setDataError("");
+
+        try {
+          const savedWorkout = await saveCloudWorkout(auth.user.id, updatedWorkout, {
+            isEditing: true,
+          });
+          setWorkouts((currentWorkouts) =>
+            currentWorkouts.map((workout) =>
+              workout.id === editingWorkoutId ? savedWorkout : workout
+            )
+          );
+          resetForm();
+          setIsCreating(false);
+        } catch {
+          setDataError("Unable to save workout. Please try again.");
+        } finally {
+          setIsSavingWorkout(false);
+        }
+
+        return;
+      }
+
       const updatedWorkouts = workouts.map((workout) =>
         workout.id === editingWorkoutId
           ? { ...workout, ...workoutData }
@@ -292,6 +420,25 @@ export function TrackerPage() {
         createdAt: Date.now(),
         ...workoutData,
       };
+
+      if (isCloudMode) {
+        setIsSavingWorkout(true);
+        setDataError("");
+
+        try {
+          const savedWorkout = await saveCloudWorkout(auth.user.id, newWorkout);
+          setWorkouts((currentWorkouts) => [savedWorkout, ...currentWorkouts]);
+          resetForm();
+          setIsCreating(false);
+        } catch {
+          setDataError("Unable to save workout. Please try again.");
+        } finally {
+          setIsSavingWorkout(false);
+        }
+
+        return;
+      }
+
       persistWorkouts([newWorkout, ...workouts]);
     }
 
@@ -299,8 +446,10 @@ export function TrackerPage() {
     setIsCreating(false);
   };
 
-  const handleSaveTemplate = (event) => {
+  const handleSaveTemplate = async (event) => {
     event.preventDefault();
+
+    if (isSavingTemplate) return;
 
     const trimmedName = templateName.trim();
     const validExercises = templateExercises
@@ -323,6 +472,28 @@ export function TrackerPage() {
         name: exercise.name,
       })),
     };
+
+    if (isCloudMode) {
+      setIsSavingTemplate(true);
+      setDataError("");
+
+      try {
+        const savedTemplate = await saveCloudTemplate(
+          auth.user.id,
+          newTemplate,
+          templates
+        );
+        setTemplates((currentTemplates) => [savedTemplate, ...currentTemplates]);
+        resetTemplateForm();
+        setIsCreatingTemplate(false);
+      } catch {
+        setDataError("Unable to save template. Please try again.");
+      } finally {
+        setIsSavingTemplate(false);
+      }
+
+      return;
+    }
 
     persistTemplates([newTemplate, ...templates]);
     resetTemplateForm();
@@ -396,6 +567,10 @@ export function TrackerPage() {
         templateAutocompleteExerciseId={templateAutocompleteExerciseId}
         isCreatingTemplate={isCreatingTemplate}
         uniqueExercises={uniqueExercises}
+        dataError={dataError}
+        isDataLoading={isDataLoading}
+        isSavingTemplate={isSavingTemplate}
+        deletingTemplateId={deletingTemplateId}
         onTemplateNameChange={setTemplateName}
         onTemplateExerciseNameChange={updateTemplateExerciseName}
         onAddTemplateExercise={addTemplateExercise}
@@ -442,6 +617,10 @@ export function TrackerPage() {
       autocompleteExerciseId={autocompleteExerciseId}
       sortedWorkouts={sortedWorkouts}
       workouts={workouts}
+      dataError={dataError}
+      isDataLoading={isDataLoading}
+      isSavingWorkout={isSavingWorkout}
+      deletingWorkoutId={deletingWorkoutId}
       onViewChange={setView}
       onNewWorkout={() => setIsCreating(true)}
       onWorkoutNameChange={setWorkoutName}
