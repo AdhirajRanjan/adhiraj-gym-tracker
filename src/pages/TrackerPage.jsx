@@ -9,6 +9,7 @@ import {
 import { useAuthSession } from "../hooks/useAuthSession.js";
 import {
   fetchCloudTrainingData,
+  importCloudTrainingData,
   removeCloudTemplate,
   removeCloudWorkout,
   saveCloudTemplate,
@@ -20,8 +21,15 @@ import {
 } from "../lib/analytics.js";
 import { Dashboard } from "../components/Dashboard.jsx";
 import { ExerciseHistoryView } from "../components/ExerciseHistoryView.jsx";
+import { MigrationModal } from "../components/MigrationModal.jsx";
 import { SettingsView } from "../components/SettingsView.jsx";
 import { TemplatesView } from "../components/TemplatesView.jsx";
+
+const MIGRATION_DISMISSED_KEY_PREFIX = "venato-migration-dismissed";
+
+function getMigrationDismissedKey(userId) {
+  return `${MIGRATION_DISMISSED_KEY_PREFIX}:${userId}`;
+}
 
 export function TrackerPage() {
   const auth = useAuthSession();
@@ -30,8 +38,11 @@ export function TrackerPage() {
   const [hasLocalTrainingData, setHasLocalTrainingData] = useState(() =>
     hasStoredLocalTrainingData()
   );
+  const [storageMode, setStorageMode] = useState("local");
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [isImportingLocalData, setIsImportingLocalData] = useState(false);
   const [isSavingWorkout, setIsSavingWorkout] = useState(false);
   const [deletingWorkoutId, setDeletingWorkoutId] = useState(null);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -49,16 +60,19 @@ export function TrackerPage() {
   const [templateName, setTemplateName] = useState("");
   const [templateExercises, setTemplateExercises] = useState([createTemplateExercise()]);
   const [templateAutocompleteExerciseId, setTemplateAutocompleteExerciseId] = useState(null);
-  const isCloudMode = Boolean(auth.user && !hasLocalTrainingData);
+  const isCloudMode = storageMode === "cloud";
 
   useEffect(() => {
     if (auth.isAuthLoading) return;
 
-    if (!isCloudMode) {
+    if (!auth.user) {
+      setStorageMode("local");
+      setShowMigrationModal(false);
       setIsDataLoading(false);
       setDataError("");
       setWorkouts(getInitialWorkouts());
       setTemplates(getInitialTemplates());
+      setHasLocalTrainingData(hasStoredLocalTrainingData());
       return;
     }
 
@@ -69,12 +83,47 @@ export function TrackerPage() {
     fetchCloudTrainingData(auth.user.id)
       .then((trainingData) => {
         if (!isActive) return;
-        setWorkouts(trainingData.workouts);
-        setTemplates(trainingData.templates);
+        const cloudHasTrainingData =
+          trainingData.workouts.length > 0 || trainingData.templates.length > 0;
+        const localWorkouts = getInitialWorkouts();
+        const localTemplates = getInitialTemplates();
+        const localHasTrainingData =
+          localWorkouts.length > 0 || localTemplates.length > 0;
+
+        setHasLocalTrainingData(localHasTrainingData);
+
+        if (cloudHasTrainingData) {
+          setStorageMode("cloud");
+          setShowMigrationModal(false);
+          setWorkouts(trainingData.workouts);
+          setTemplates(trainingData.templates);
+          return;
+        }
+
+        if (localHasTrainingData) {
+          const hasDismissedMigration = sessionStorage.getItem(
+            getMigrationDismissedKey(auth.user.id)
+          );
+
+          setStorageMode("local");
+          setWorkouts(localWorkouts);
+          setTemplates(localTemplates);
+          setShowMigrationModal(!hasDismissedMigration);
+          return;
+        }
+
+        setStorageMode("cloud");
+        setShowMigrationModal(false);
+        setWorkouts([]);
+        setTemplates([]);
       })
       .catch(() => {
         if (!isActive) return;
         setDataError("Unable to load cloud data. Please refresh and try again.");
+        setStorageMode("local");
+        setWorkouts(getInitialWorkouts());
+        setTemplates(getInitialTemplates());
+        setHasLocalTrainingData(hasStoredLocalTrainingData());
       })
       .finally(() => {
         if (!isActive) return;
@@ -84,7 +133,7 @@ export function TrackerPage() {
     return () => {
       isActive = false;
     };
-  }, [auth.isAuthLoading, auth.user?.id, isCloudMode]);
+  }, [auth.isAuthLoading, auth.user?.id]);
 
   const sortedWorkouts = useMemo(
     () =>
@@ -106,6 +155,11 @@ export function TrackerPage() {
     setTemplates(nextTemplates);
     localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
     setHasLocalTrainingData(workouts.length > 0 || nextTemplates.length > 0);
+  };
+
+  const cacheTrainingData = (nextWorkouts, nextTemplates) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextWorkouts));
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
   };
 
   const uniqueExercises = useMemo(() => getUniqueExerciseNames(workouts), [workouts]);
@@ -173,9 +227,9 @@ export function TrackerPage() {
 
       try {
         await removeCloudWorkout(auth.user.id, workoutId);
-        setWorkouts((currentWorkouts) =>
-          currentWorkouts.filter((workout) => workout.id !== workoutId)
-        );
+        const nextWorkouts = workouts.filter((workout) => workout.id !== workoutId);
+        setWorkouts(nextWorkouts);
+        cacheTrainingData(nextWorkouts, templates);
       } catch {
         setDataError("Unable to delete workout. Please try again.");
       } finally {
@@ -199,9 +253,9 @@ export function TrackerPage() {
 
       try {
         await removeCloudTemplate(auth.user.id, templateId);
-        setTemplates((currentTemplates) =>
-          currentTemplates.filter((template) => template.id !== templateId)
-        );
+        const nextTemplates = templates.filter((template) => template.id !== templateId);
+        setTemplates(nextTemplates);
+        cacheTrainingData(workouts, nextTemplates);
       } catch {
         setDataError("Unable to delete template. Please try again.");
       } finally {
@@ -240,6 +294,44 @@ export function TrackerPage() {
     setIsCreating(false);
     setView("dashboard");
     setSelectedExercise("");
+  };
+
+  const dismissMigrationPrompt = () => {
+    if (auth.user) {
+      sessionStorage.setItem(getMigrationDismissedKey(auth.user.id), "true");
+    }
+
+    setShowMigrationModal(false);
+  };
+
+  const importLocalData = async () => {
+    if (!auth.user || isImportingLocalData) return;
+
+    const localWorkouts = getInitialWorkouts();
+    const localTemplates = getInitialTemplates();
+
+    setIsImportingLocalData(true);
+    setDataError("");
+
+    try {
+      const trainingData = await importCloudTrainingData(auth.user.id, {
+        workouts: localWorkouts,
+        templates: localTemplates,
+      });
+
+      setStorageMode("cloud");
+      setShowMigrationModal(false);
+      setWorkouts(trainingData.workouts);
+      setTemplates(trainingData.templates);
+      setHasLocalTrainingData(
+        localWorkouts.length > 0 || localTemplates.length > 0
+      );
+      cacheTrainingData(trainingData.workouts, trainingData.templates);
+    } catch {
+      setDataError("Unable to import local data. Please try again.");
+    } finally {
+      setIsImportingLocalData(false);
+    }
   };
 
   const addExercise = () => {
@@ -392,11 +484,11 @@ export function TrackerPage() {
           const savedWorkout = await saveCloudWorkout(auth.user.id, updatedWorkout, {
             isEditing: true,
           });
-          setWorkouts((currentWorkouts) =>
-            currentWorkouts.map((workout) =>
-              workout.id === editingWorkoutId ? savedWorkout : workout
-            )
+          const nextWorkouts = workouts.map((workout) =>
+            workout.id === editingWorkoutId ? savedWorkout : workout
           );
+          setWorkouts(nextWorkouts);
+          cacheTrainingData(nextWorkouts, templates);
           resetForm();
           setIsCreating(false);
         } catch {
@@ -427,7 +519,9 @@ export function TrackerPage() {
 
         try {
           const savedWorkout = await saveCloudWorkout(auth.user.id, newWorkout);
-          setWorkouts((currentWorkouts) => [savedWorkout, ...currentWorkouts]);
+          const nextWorkouts = [savedWorkout, ...workouts];
+          setWorkouts(nextWorkouts);
+          cacheTrainingData(nextWorkouts, templates);
           resetForm();
           setIsCreating(false);
         } catch {
@@ -483,7 +577,9 @@ export function TrackerPage() {
           newTemplate,
           templates
         );
-        setTemplates((currentTemplates) => [savedTemplate, ...currentTemplates]);
+        const nextTemplates = [savedTemplate, ...templates];
+        setTemplates(nextTemplates);
+        cacheTrainingData(workouts, nextTemplates);
         resetTemplateForm();
         setIsCreatingTemplate(false);
       } catch {
@@ -541,109 +637,130 @@ export function TrackerPage() {
     setIsCreating(true);
   };
 
+  const migrationModal = showMigrationModal ? (
+    <MigrationModal
+      error={dataError}
+      isImporting={isImportingLocalData}
+      onImport={importLocalData}
+      onDismiss={dismissMigrationPrompt}
+    />
+  ) : null;
+
   if (view === "history") {
     return (
-      <ExerciseHistoryView
-        uniqueExercises={uniqueExercises}
-        selectedExercise={selectedExercise}
-        exerciseAnalytics={exerciseAnalytics}
-        personalRecord={personalRecord}
-        selectedExerciseEntries={selectedExerciseEntries}
-        onExerciseSelect={setSelectedExercise}
-        onBack={() => {
-          setView("dashboard");
-          setSelectedExercise("");
-        }}
-      />
+      <>
+        <ExerciseHistoryView
+          uniqueExercises={uniqueExercises}
+          selectedExercise={selectedExercise}
+          exerciseAnalytics={exerciseAnalytics}
+          personalRecord={personalRecord}
+          selectedExerciseEntries={selectedExerciseEntries}
+          onExerciseSelect={setSelectedExercise}
+          onBack={() => {
+            setView("dashboard");
+            setSelectedExercise("");
+          }}
+        />
+        {migrationModal}
+      </>
     );
   }
 
   if (view === "templates") {
     return (
-      <TemplatesView
-        templates={templates}
-        templateName={templateName}
-        templateExercises={templateExercises}
-        templateAutocompleteExerciseId={templateAutocompleteExerciseId}
-        isCreatingTemplate={isCreatingTemplate}
-        uniqueExercises={uniqueExercises}
-        dataError={dataError}
-        isDataLoading={isDataLoading}
-        isSavingTemplate={isSavingTemplate}
-        deletingTemplateId={deletingTemplateId}
-        onTemplateNameChange={setTemplateName}
-        onTemplateExerciseNameChange={updateTemplateExerciseName}
-        onAddTemplateExercise={addTemplateExercise}
-        onRemoveTemplateExercise={removeTemplateExercise}
-        onTemplateAutocompleteFocus={setTemplateAutocompleteExerciseId}
-        onTemplateAutocompleteBlur={setTemplateAutocompleteExerciseId}
-        onSaveTemplate={handleSaveTemplate}
-        onDeleteTemplate={deleteTemplate}
-        onCancelTemplate={() => {
-          resetTemplateForm();
-          setIsCreatingTemplate(false);
-        }}
-        onNewTemplate={() => setIsCreatingTemplate(true)}
-        onBack={() => {
-          setView("dashboard");
-          setIsCreatingTemplate(false);
-          resetTemplateForm();
-        }}
-      />
+      <>
+        <TemplatesView
+          templates={templates}
+          templateName={templateName}
+          templateExercises={templateExercises}
+          templateAutocompleteExerciseId={templateAutocompleteExerciseId}
+          isCreatingTemplate={isCreatingTemplate}
+          uniqueExercises={uniqueExercises}
+          dataError={dataError}
+          isDataLoading={isDataLoading}
+          isSavingTemplate={isSavingTemplate}
+          deletingTemplateId={deletingTemplateId}
+          onTemplateNameChange={setTemplateName}
+          onTemplateExerciseNameChange={updateTemplateExerciseName}
+          onAddTemplateExercise={addTemplateExercise}
+          onRemoveTemplateExercise={removeTemplateExercise}
+          onTemplateAutocompleteFocus={setTemplateAutocompleteExerciseId}
+          onTemplateAutocompleteBlur={setTemplateAutocompleteExerciseId}
+          onSaveTemplate={handleSaveTemplate}
+          onDeleteTemplate={deleteTemplate}
+          onCancelTemplate={() => {
+            resetTemplateForm();
+            setIsCreatingTemplate(false);
+          }}
+          onNewTemplate={() => setIsCreatingTemplate(true)}
+          onBack={() => {
+            setView("dashboard");
+            setIsCreatingTemplate(false);
+            resetTemplateForm();
+          }}
+        />
+        {migrationModal}
+      </>
     );
   }
 
   if (view === "settings") {
     return (
-      <SettingsView
-        auth={auth}
-        onBack={() => setView("dashboard")}
-        onClearAllData={clearAllData}
-      />
+      <>
+        <SettingsView
+          auth={auth}
+          onBack={() => setView("dashboard")}
+          onClearAllData={clearAllData}
+        />
+        {migrationModal}
+      </>
     );
   }
 
   return (
-    <Dashboard
-      stats={stats}
-      isCreating={isCreating}
-      editingWorkoutId={editingWorkoutId}
-      workoutName={workoutName}
-      workoutDate={workoutDate}
-      exercises={exercises}
-      workoutNotes={workoutNotes}
-      templates={templates}
-      uniqueExercises={uniqueExercises}
-      autocompleteExerciseId={autocompleteExerciseId}
-      sortedWorkouts={sortedWorkouts}
-      workouts={workouts}
-      dataError={dataError}
-      isDataLoading={isDataLoading}
-      isSavingWorkout={isSavingWorkout}
-      deletingWorkoutId={deletingWorkoutId}
-      onViewChange={setView}
-      onNewWorkout={() => setIsCreating(true)}
-      onWorkoutNameChange={setWorkoutName}
-      onWorkoutDateChange={setWorkoutDate}
-      onWorkoutNotesChange={setWorkoutNotes}
-      onExerciseNameChange={updateExerciseName}
-      onSetFieldChange={updateSetField}
-      onAddExercise={addExercise}
-      onRemoveExercise={removeExercise}
-      onMoveExerciseUp={moveExerciseUp}
-      onMoveExerciseDown={moveExerciseDown}
-      onAddSet={addSetToExercise}
-      onRemoveSet={removeSet}
-      onAutocompleteFocus={setAutocompleteExerciseId}
-      onAutocompleteBlur={setAutocompleteExerciseId}
-      onApplyTemplate={applyTemplate}
-      onSaveWorkout={handleSaveWorkout}
-      onCancelWorkout={() => {
-        resetForm();
-        setIsCreating(false);
-      }}
-      onEditWorkout={editWorkout}
-      onDeleteWorkout={deleteWorkout}
-    />
+    <>
+      <Dashboard
+        stats={stats}
+        isCreating={isCreating}
+        editingWorkoutId={editingWorkoutId}
+        workoutName={workoutName}
+        workoutDate={workoutDate}
+        exercises={exercises}
+        workoutNotes={workoutNotes}
+        templates={templates}
+        uniqueExercises={uniqueExercises}
+        autocompleteExerciseId={autocompleteExerciseId}
+        sortedWorkouts={sortedWorkouts}
+        workouts={workouts}
+        dataError={dataError}
+        isDataLoading={isDataLoading}
+        isSavingWorkout={isSavingWorkout}
+        deletingWorkoutId={deletingWorkoutId}
+        onViewChange={setView}
+        onNewWorkout={() => setIsCreating(true)}
+        onWorkoutNameChange={setWorkoutName}
+        onWorkoutDateChange={setWorkoutDate}
+        onWorkoutNotesChange={setWorkoutNotes}
+        onExerciseNameChange={updateExerciseName}
+        onSetFieldChange={updateSetField}
+        onAddExercise={addExercise}
+        onRemoveExercise={removeExercise}
+        onMoveExerciseUp={moveExerciseUp}
+        onMoveExerciseDown={moveExerciseDown}
+        onAddSet={addSetToExercise}
+        onRemoveSet={removeSet}
+        onAutocompleteFocus={setAutocompleteExerciseId}
+        onAutocompleteBlur={setAutocompleteExerciseId}
+        onApplyTemplate={applyTemplate}
+        onSaveWorkout={handleSaveWorkout}
+        onCancelWorkout={() => {
+          resetForm();
+          setIsCreating(false);
+        }}
+        onEditWorkout={editWorkout}
+        onDeleteWorkout={deleteWorkout}
+      />
+      {migrationModal}
+    </>
   );
 }

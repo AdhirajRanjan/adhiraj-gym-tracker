@@ -9,23 +9,37 @@ function requireData(result) {
   return result.data ?? [];
 }
 
-function toTemplateRow(userId, template, templateOrder) {
-  return {
+function toTemplateRow(userId, template, templateOrder, { includeLocalId = false } = {}) {
+  const row = {
     id: template.id,
     user_id: userId,
     name: template.name,
     template_order: templateOrder,
   };
+
+  if (includeLocalId) {
+    row.local_id = template.local_id || template.localId || template.id;
+  }
+
+  return row;
 }
 
-function toTemplateExerciseRows(userId, template) {
-  return template.exercises.map((exercise, index) => ({
-    id: exercise.id,
-    user_id: userId,
-    template_id: template.id,
-    exercise_name: exercise.name,
-    exercise_order: index,
-  }));
+function toTemplateExerciseRows(userId, template, { includeLocalId = false } = {}) {
+  return template.exercises.map((exercise, index) => {
+    const row = {
+      id: exercise.id,
+      user_id: userId,
+      template_id: template.id,
+      exercise_name: exercise.name,
+      exercise_order: index,
+    };
+
+    if (includeLocalId) {
+      row.local_id = exercise.local_id || exercise.localId || exercise.id;
+    }
+
+    return row;
+  });
 }
 
 function toAppTemplate(templateRow, exerciseRows) {
@@ -215,4 +229,46 @@ export async function saveCloudTemplate(userId, template, existingTemplates = []
 
 export async function removeCloudTemplate(userId, templateId) {
   requireData(await deleteWorkoutTemplate(userId, templateId));
+}
+
+export async function importCloudTemplate(userId, template, templateOrder) {
+  const client = getSupabaseClient();
+  const templateRow = toTemplateRow(userId, template, templateOrder, {
+    includeLocalId: true,
+  });
+  const exerciseRows = toTemplateExerciseRows(userId, template, {
+    includeLocalId: true,
+  });
+
+  requireData(
+    await client
+      .from(TABLES.workoutTemplates)
+      .upsert(templateRow, { onConflict: "id" })
+      .select("*")
+      .single()
+  );
+
+  requireData(
+    await client
+      .from(TABLES.templateExercises)
+      .delete()
+      .eq("user_id", userId)
+      .eq("template_id", template.id)
+  );
+
+  if (exerciseRows.length) {
+    requireData(await client.from(TABLES.templateExercises).insert(exerciseRows));
+  }
+
+  return fetchCloudTemplate(userId, template.id);
+}
+
+export async function importCloudTemplates(userId, templates = []) {
+  const importedTemplates = [];
+
+  for (const [index, template] of templates.entries()) {
+    importedTemplates.push(await importCloudTemplate(userId, template, index));
+  }
+
+  return importedTemplates;
 }

@@ -13,8 +13,8 @@ function toTimestamp(value) {
   return value ? new Date(value).getTime() : Date.now();
 }
 
-function toWorkoutRow(userId, workout) {
-  return {
+function toWorkoutRow(userId, workout, { includeLocalId = false } = {}) {
+  const row = {
     id: workout.id,
     user_id: userId,
     name: workout.name,
@@ -24,28 +24,50 @@ function toWorkoutRow(userId, workout) {
       ? new Date(workout.createdAt).toISOString()
       : undefined,
   };
+
+  if (includeLocalId) {
+    row.local_id = workout.local_id || workout.localId || workout.id;
+  }
+
+  return row;
 }
 
-function toExerciseRows(userId, workout) {
-  return workout.exercises.map((exercise, index) => ({
-    id: exercise.id,
-    user_id: userId,
-    workout_id: workout.id,
-    exercise_name: exercise.name,
-    exercise_order: index,
-  }));
-}
-
-function toSetRows(userId, workout) {
-  return workout.exercises.flatMap((exercise) =>
-    exercise.sets.map((set, index) => ({
-      id: set.id,
+function toExerciseRows(userId, workout, { includeLocalId = false } = {}) {
+  return workout.exercises.map((exercise, index) => {
+    const row = {
+      id: exercise.id,
       user_id: userId,
-      workout_exercise_id: exercise.id,
-      set_order: index,
-      weight: Number(set.weight),
-      reps: Number(set.reps),
-    }))
+      workout_id: workout.id,
+      exercise_name: exercise.name,
+      exercise_order: index,
+    };
+
+    if (includeLocalId) {
+      row.local_id = exercise.local_id || exercise.localId || exercise.id;
+    }
+
+    return row;
+  });
+}
+
+function toSetRows(userId, workout, { includeLocalId = false } = {}) {
+  return workout.exercises.flatMap((exercise) =>
+    exercise.sets.map((set, index) => {
+      const row = {
+        id: set.id,
+        user_id: userId,
+        workout_exercise_id: exercise.id,
+        set_order: index,
+        weight: Number(set.weight),
+        reps: Number(set.reps),
+      };
+
+      if (includeLocalId) {
+        row.local_id = set.local_id || set.localId || set.id;
+      }
+
+      return row;
+    })
   );
 }
 
@@ -347,4 +369,47 @@ export async function saveCloudWorkout(userId, workout, { isEditing = false } = 
 
 export async function removeCloudWorkout(userId, workoutId) {
   requireData(await deleteWorkout(userId, workoutId));
+}
+
+export async function importCloudWorkout(userId, workout) {
+  const client = getSupabaseClient();
+  const workoutRow = toWorkoutRow(userId, workout, { includeLocalId: true });
+  const exerciseRows = toExerciseRows(userId, workout, { includeLocalId: true });
+  const setRows = toSetRows(userId, workout, { includeLocalId: true });
+
+  requireData(
+    await client
+      .from(TABLES.workouts)
+      .upsert(workoutRow, { onConflict: "id" })
+      .select("*")
+      .single()
+  );
+
+  requireData(
+    await client
+      .from(TABLES.workoutExercises)
+      .delete()
+      .eq("user_id", userId)
+      .eq("workout_id", workout.id)
+  );
+
+  if (exerciseRows.length) {
+    requireData(await client.from(TABLES.workoutExercises).insert(exerciseRows));
+  }
+
+  if (setRows.length) {
+    requireData(await client.from(TABLES.workoutSets).insert(setRows));
+  }
+
+  return fetchCloudWorkout(userId, workout.id);
+}
+
+export async function importCloudWorkouts(userId, workouts = []) {
+  const importedWorkouts = [];
+
+  for (const workout of workouts) {
+    importedWorkouts.push(await importCloudWorkout(userId, workout));
+  }
+
+  return importedWorkouts;
 }
