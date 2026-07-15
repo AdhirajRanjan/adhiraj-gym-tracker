@@ -494,6 +494,57 @@ button:disabled:hover {
   color: #fca5a5;
 }
 
+.toast-region {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 140;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 190px;
+  max-width: min(360px, calc(100vw - 36px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #2e3a4d;
+  border-radius: 14px;
+  background: rgba(15, 21, 33, 0.92);
+  color: #f9fafb;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 48px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(14px);
+  font-size: 0.93rem;
+  font-weight: 650;
+}
+
+.toast-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+  flex: 0 0 auto;
+}
+
+.toast-success .toast-dot {
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.14);
+}
+
+.toast-error .toast-dot {
+  background: #f87171;
+  box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.14);
+}
+
+.toast-loading .toast-dot {
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.14);
+}
+
 .workout-list {
   display: grid;
   gap: 14px;
@@ -845,6 +896,16 @@ button:disabled:hover {
 
   .container {
     gap: 14px;
+  }
+
+  .toast-region {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+  }
+
+  .toast {
+    max-width: none;
   }
 
   .header {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { STORAGE_KEY, TEMPLATES_STORAGE_KEY } from "../lib/constants.js";
 import { createSet, createExercise, createTemplateExercise } from "../lib/factories.js";
 import {
@@ -24,6 +24,7 @@ import { ExerciseHistoryView } from "../components/ExerciseHistoryView.jsx";
 import { MigrationModal } from "../components/MigrationModal.jsx";
 import { SettingsView } from "../components/SettingsView.jsx";
 import { TemplatesView } from "../components/TemplatesView.jsx";
+import { Toast } from "../components/Toast.jsx";
 
 const MIGRATION_DISMISSED_KEY_PREFIX = "venato-migration-dismissed";
 
@@ -41,6 +42,7 @@ export function TrackerPage() {
   const [storageMode, setStorageMode] = useState("local");
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
+  const [toast, setToast] = useState(null);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [isImportingLocalData, setIsImportingLocalData] = useState(false);
   const [isSavingWorkout, setIsSavingWorkout] = useState(false);
@@ -60,7 +62,67 @@ export function TrackerPage() {
   const [templateName, setTemplateName] = useState("");
   const [templateExercises, setTemplateExercises] = useState([createTemplateExercise()]);
   const [templateAutocompleteExerciseId, setTemplateAutocompleteExerciseId] = useState(null);
+  const toastTimeoutRef = useRef(null);
   const isCloudMode = storageMode === "cloud";
+
+  const showToast = (message, tone = "success", { duration = 2600 } = {}) => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+
+    const nextToast = {
+      id: crypto.randomUUID(),
+      message,
+      tone,
+    };
+
+    setToast(nextToast);
+
+    if (duration) {
+      toastTimeoutRef.current = window.setTimeout(() => {
+        setToast(null);
+        toastTimeoutRef.current = null;
+      }, duration);
+    }
+
+    return nextToast.id;
+  };
+
+  const updateToast = (id, message, tone = "success", { duration = 1800 } = {}) => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+
+    setToast((currentToast) => {
+      if (!currentToast || currentToast.id !== id) {
+        return {
+          id: crypto.randomUUID(),
+          message,
+          tone,
+        };
+      }
+
+      return { ...currentToast, message, tone };
+    });
+
+    if (duration) {
+      toastTimeoutRef.current = window.setTimeout(() => {
+        setToast(null);
+        toastTimeoutRef.current = null;
+      }, duration);
+    }
+  };
+
+  useEffect(
+    () => () => {
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (auth.isAuthLoading) return;
@@ -120,6 +182,7 @@ export function TrackerPage() {
       .catch(() => {
         if (!isActive) return;
         setDataError("Unable to load cloud data. Please refresh and try again.");
+        showToast("Unable to load cloud data. Please refresh and try again.", "error");
         setStorageMode("local");
         setWorkouts(getInitialWorkouts());
         setTemplates(getInitialTemplates());
@@ -232,6 +295,7 @@ export function TrackerPage() {
         cacheTrainingData(nextWorkouts, templates);
       } catch {
         setDataError("Unable to delete workout. Please try again.");
+        showToast("Unable to delete workout. Please try again.", "error");
       } finally {
         setDeletingWorkoutId(null);
       }
@@ -258,6 +322,7 @@ export function TrackerPage() {
         cacheTrainingData(workouts, nextTemplates);
       } catch {
         setDataError("Unable to delete template. Please try again.");
+        showToast("Unable to delete template. Please try again.", "error");
       } finally {
         setDeletingTemplateId(null);
       }
@@ -327,8 +392,10 @@ export function TrackerPage() {
         localWorkouts.length > 0 || localTemplates.length > 0
       );
       cacheTrainingData(trainingData.workouts, trainingData.templates);
+      showToast("Saved ✓");
     } catch {
       setDataError("Unable to import local data. Please try again.");
+      showToast("Unable to import local data. Please try again.", "error");
     } finally {
       setIsImportingLocalData(false);
     }
@@ -447,8 +514,9 @@ export function TrackerPage() {
       .filter((exercise) => exercise.name !== "" && exercise.sets.length > 0);
 
     if (!trimmedName || !workoutDate || validExercises.length === 0) {
-      window.alert(
-        "Please enter workout name, date, and at least one exercise with one complete set."
+      showToast(
+        "Please enter workout name, date, and at least one complete set.",
+        "error"
       );
       return;
     }
@@ -479,6 +547,7 @@ export function TrackerPage() {
       if (isCloudMode) {
         setIsSavingWorkout(true);
         setDataError("");
+        const toastId = showToast("Saving...", "loading", { duration: null });
 
         try {
           const savedWorkout = await saveCloudWorkout(auth.user.id, updatedWorkout, {
@@ -491,8 +560,12 @@ export function TrackerPage() {
           cacheTrainingData(nextWorkouts, templates);
           resetForm();
           setIsCreating(false);
+          updateToast(toastId, "Saved ✓");
         } catch {
           setDataError("Unable to save workout. Please try again.");
+          updateToast(toastId, "Unable to save workout. Please try again.", "error", {
+            duration: 2600,
+          });
         } finally {
           setIsSavingWorkout(false);
         }
@@ -506,6 +579,7 @@ export function TrackerPage() {
           : workout
       );
       persistWorkouts(updatedWorkouts);
+      showToast("Workout saved ✓");
     } else {
       const newWorkout = {
         id: crypto.randomUUID(),
@@ -516,6 +590,7 @@ export function TrackerPage() {
       if (isCloudMode) {
         setIsSavingWorkout(true);
         setDataError("");
+        const toastId = showToast("Saving...", "loading", { duration: null });
 
         try {
           const savedWorkout = await saveCloudWorkout(auth.user.id, newWorkout);
@@ -524,8 +599,12 @@ export function TrackerPage() {
           cacheTrainingData(nextWorkouts, templates);
           resetForm();
           setIsCreating(false);
+          updateToast(toastId, "Saved ✓");
         } catch {
           setDataError("Unable to save workout. Please try again.");
+          updateToast(toastId, "Unable to save workout. Please try again.", "error", {
+            duration: 2600,
+          });
         } finally {
           setIsSavingWorkout(false);
         }
@@ -534,6 +613,7 @@ export function TrackerPage() {
       }
 
       persistWorkouts([newWorkout, ...workouts]);
+      showToast("Workout saved ✓");
     }
 
     resetForm();
@@ -554,7 +634,7 @@ export function TrackerPage() {
       .filter((exercise) => exercise.name !== "");
 
     if (!trimmedName || validExercises.length === 0) {
-      window.alert("Please enter template name and at least one exercise.");
+      showToast("Please enter template name and at least one exercise.", "error");
       return;
     }
 
@@ -570,6 +650,7 @@ export function TrackerPage() {
     if (isCloudMode) {
       setIsSavingTemplate(true);
       setDataError("");
+      const toastId = showToast("Saving...", "loading", { duration: null });
 
       try {
         const savedTemplate = await saveCloudTemplate(
@@ -582,8 +663,12 @@ export function TrackerPage() {
         cacheTrainingData(workouts, nextTemplates);
         resetTemplateForm();
         setIsCreatingTemplate(false);
+        updateToast(toastId, "Saved ✓");
       } catch {
         setDataError("Unable to save template. Please try again.");
+        updateToast(toastId, "Unable to save template. Please try again.", "error", {
+          duration: 2600,
+        });
       } finally {
         setIsSavingTemplate(false);
       }
@@ -592,6 +677,7 @@ export function TrackerPage() {
     }
 
     persistTemplates([newTemplate, ...templates]);
+    showToast("Saved ✓");
     resetTemplateForm();
     setIsCreatingTemplate(false);
   };
@@ -662,6 +748,7 @@ export function TrackerPage() {
           }}
         />
         {migrationModal}
+        <Toast toast={toast} />
       </>
     );
   }
@@ -676,7 +763,6 @@ export function TrackerPage() {
           templateAutocompleteExerciseId={templateAutocompleteExerciseId}
           isCreatingTemplate={isCreatingTemplate}
           uniqueExercises={uniqueExercises}
-          dataError={dataError}
           isDataLoading={isDataLoading}
           isSavingTemplate={isSavingTemplate}
           deletingTemplateId={deletingTemplateId}
@@ -700,6 +786,7 @@ export function TrackerPage() {
           }}
         />
         {migrationModal}
+        <Toast toast={toast} />
       </>
     );
   }
@@ -713,6 +800,7 @@ export function TrackerPage() {
           onClearAllData={clearAllData}
         />
         {migrationModal}
+        <Toast toast={toast} />
       </>
     );
   }
@@ -732,7 +820,6 @@ export function TrackerPage() {
         autocompleteExerciseId={autocompleteExerciseId}
         sortedWorkouts={sortedWorkouts}
         workouts={workouts}
-        dataError={dataError}
         isDataLoading={isDataLoading}
         isSavingWorkout={isSavingWorkout}
         deletingWorkoutId={deletingWorkoutId}
@@ -761,6 +848,7 @@ export function TrackerPage() {
         onDeleteWorkout={deleteWorkout}
       />
       {migrationModal}
+      <Toast toast={toast} />
     </>
   );
 }

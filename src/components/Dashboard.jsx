@@ -1,3 +1,4 @@
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Header } from "./Header.jsx";
 import { StatsCards } from "./StatsCards.jsx";
 import { WorkoutForm } from "./WorkoutForm.jsx";
@@ -16,7 +17,6 @@ export function Dashboard({
   autocompleteExerciseId,
   sortedWorkouts,
   workouts,
-  dataError,
   isDataLoading,
   isSavingWorkout,
   deletingWorkoutId,
@@ -41,6 +41,8 @@ export function Dashboard({
   onEditWorkout,
   onDeleteWorkout,
 }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="page">
       <div className="container">
@@ -51,44 +53,53 @@ export function Dashboard({
           onNewWorkout={onNewWorkout}
         />
 
-        {(isDataLoading || dataError) && (
-          <p className={`data-status ${dataError ? "error" : ""}`}>
-            {dataError || "Loading cloud data..."}
-          </p>
+        {isDataLoading && (
+          <p className="data-status">Loading cloud data...</p>
         )}
 
         <StatsCards stats={stats} />
 
-        {isCreating && (
-          <WorkoutForm
-            workoutName={workoutName}
-            workoutDate={workoutDate}
-            exercises={exercises}
-            workoutNotes={workoutNotes}
-            editingWorkoutId={editingWorkoutId}
-            templates={templates}
-            uniqueExercises={uniqueExercises}
-            autocompleteExerciseId={autocompleteExerciseId}
-            workouts={workouts}
-            onWorkoutNameChange={onWorkoutNameChange}
-            onWorkoutDateChange={onWorkoutDateChange}
-            onWorkoutNotesChange={onWorkoutNotesChange}
-            onExerciseNameChange={onExerciseNameChange}
-            onSetFieldChange={onSetFieldChange}
-            onAddExercise={onAddExercise}
-            onRemoveExercise={onRemoveExercise}
-            onMoveExerciseUp={onMoveExerciseUp}
-            onMoveExerciseDown={onMoveExerciseDown}
-            onAddSet={onAddSet}
-            onRemoveSet={onRemoveSet}
-            onAutocompleteFocus={onAutocompleteFocus}
-            onAutocompleteBlur={onAutocompleteBlur}
-            onApplyTemplate={onApplyTemplate}
-            onSubmit={onSaveWorkout}
-            onCancel={onCancelWorkout}
-            isSubmitting={isSavingWorkout}
-          />
-        )}
+        <AnimatePresence initial={false}>
+          {isCreating && (
+            <motion.div
+              key="workout-form"
+              layout
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <WorkoutForm
+                workoutName={workoutName}
+                workoutDate={workoutDate}
+                exercises={exercises}
+                workoutNotes={workoutNotes}
+                editingWorkoutId={editingWorkoutId}
+                templates={templates}
+                uniqueExercises={uniqueExercises}
+                autocompleteExerciseId={autocompleteExerciseId}
+                workouts={workouts}
+                onWorkoutNameChange={onWorkoutNameChange}
+                onWorkoutDateChange={onWorkoutDateChange}
+                onWorkoutNotesChange={onWorkoutNotesChange}
+                onExerciseNameChange={onExerciseNameChange}
+                onSetFieldChange={onSetFieldChange}
+                onAddExercise={onAddExercise}
+                onRemoveExercise={onRemoveExercise}
+                onMoveExerciseUp={onMoveExerciseUp}
+                onMoveExerciseDown={onMoveExerciseDown}
+                onAddSet={onAddSet}
+                onRemoveSet={onRemoveSet}
+                onAutocompleteFocus={onAutocompleteFocus}
+                onAutocompleteBlur={onAutocompleteBlur}
+                onApplyTemplate={onApplyTemplate}
+                onSubmit={onSaveWorkout}
+                onCancel={onCancelWorkout}
+                isSubmitting={isSavingWorkout}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <section className="card">
           <div className="card-header">
@@ -98,15 +109,17 @@ export function Dashboard({
             <p className="empty-state">No workouts saved yet. Click "New Workout" to start.</p>
           ) : (
             <div className="workout-list">
-              {sortedWorkouts.map((workout) => (
-                <WorkoutCard
-                  key={workout.id}
-                  workout={workout}
-                  onEdit={onEditWorkout}
-                  onDelete={onDeleteWorkout}
-                  isDeleting={deletingWorkoutId === workout.id}
-                />
-              ))}
+              <AnimatePresence initial={false}>
+                {sortedWorkouts.map((workout) => (
+                  <WorkoutCard
+                    key={workout.id}
+                    workout={workout}
+                    onEdit={onEditWorkout}
+                    onDelete={onDeleteWorkout}
+                    isDeleting={deletingWorkoutId === workout.id}
+                  />
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </section>

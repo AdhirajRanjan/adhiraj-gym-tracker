@@ -7,7 +7,6 @@ export function TemplatesView({
   templateAutocompleteExerciseId,
   isCreatingTemplate,
   uniqueExercises,
-  dataError,
   isDataLoading,
   isSavingTemplate,
   deletingTemplateId,
@@ -40,10 +39,8 @@ export function TemplatesView({
           </button>
         </header>
 
-        {(isDataLoading || dataError) && (
-          <p className={`data-status ${dataError ? "error" : ""}`}>
-            {dataError || "Loading cloud data..."}
-          </p>
+        {isDataLoading && (
+          <p className="data-status">Loading cloud data...</p>
         )}
 
         <section className="card">
