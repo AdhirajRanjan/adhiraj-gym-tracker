@@ -6,6 +6,78 @@ import {
 } from "../lib/analytics.js";
 import { getTrainingSuggestion } from "../lib/progression.js";
 
+const WEIGHT_STEP = 2.5;
+const REPS_STEP = 1;
+
+function hasEnteredSetValues(exercise) {
+  return exercise.sets.some(
+    (set) => set.weight.toString().trim() !== "" || set.reps.toString().trim() !== ""
+  );
+}
+
+function formatStepperValue(value) {
+  const roundedValue = Math.round(value * 100) / 100;
+  return Number.isInteger(roundedValue)
+    ? roundedValue.toString()
+    : roundedValue.toString();
+}
+
+function getNextStepperValue(value, delta) {
+  const currentValue = Number.parseFloat(value);
+  const nextValue = Number.isNaN(currentValue) ? Math.max(0, delta) : currentValue + delta;
+  return formatStepperValue(Math.max(0, nextValue));
+}
+
+function StepperInput({
+  inputStep,
+  label,
+  min = "0",
+  onChange,
+  placeholder,
+  step,
+  value,
+}) {
+  const adjustValue = (delta) => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    onChange(getNextStepperValue(value, delta));
+  };
+
+  return (
+    <label className="stepper-field">
+      <span>{label}</span>
+      <div className="stepper-control">
+        <button
+          type="button"
+          className="stepper-button"
+          onClick={() => adjustValue(-step)}
+          aria-label={`Decrease ${label}`}
+        >
+          -
+        </button>
+        <input
+          type="number"
+          placeholder={placeholder}
+          min={min}
+          step={inputStep ?? step}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          className="stepper-button"
+          onClick={() => adjustValue(step)}
+          aria-label={`Increase ${label}`}
+        >
+          +
+        </button>
+      </div>
+    </label>
+  );
+}
+
 export function WorkoutForm({
   workoutName,
   workoutDate,
@@ -21,6 +93,7 @@ export function WorkoutForm({
   onWorkoutNotesChange,
   onExerciseNameChange,
   onSetFieldChange,
+  onReplaceExerciseSets,
   onAddExercise,
   onRemoveExercise,
   onMoveExerciseUp,
@@ -35,6 +108,24 @@ export function WorkoutForm({
   isSubmitting = false,
 }) {
   const shouldReduceMotion = useReducedMotion();
+
+  const replaceSetsFromPreset = (exercise, nextSets) => {
+    if (hasEnteredSetValues(exercise)) {
+      const shouldReplace = window.confirm(
+        "This will replace the sets you entered for this exercise. Continue?"
+      );
+
+      if (!shouldReplace) return;
+    }
+
+    onReplaceExerciseSets(
+      exercise.id,
+      nextSets.map((set) => ({
+        weight: Number(set.weight),
+        reps: Number(set.reps),
+      }))
+    );
+  };
 
   return (
     <section className="card">
@@ -209,16 +300,23 @@ export function WorkoutForm({
                           <p className="previous-performance-exercise">{lastPerformance.exerciseName}</p>
                           <p className="previous-performance-meta">{formatDate(lastPerformance.date)}</p>
                           <p className="previous-performance-meta">{lastPerformance.workoutName}</p>
-                          <ul className="previous-performance-sets">
-                            {lastPerformance.sets.map((set, setIndex) => (
-                              <li key={set.id}>
-                                Set {setIndex + 1}: {set.weight}kg × {set.reps}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      ) : (
-                        <p className="previous-performance-empty">No previous performance found.</p>
+                        <ul className="previous-performance-sets">
+                          {lastPerformance.sets.map((set, setIndex) => (
+                            <li key={set.id}>
+                              Set {setIndex + 1}: {set.weight}kg × {set.reps}
+                            </li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          className="ghost-button card-action-button"
+                          onClick={() => replaceSetsFromPreset(exercise, lastPerformance.sets)}
+                        >
+                          Repeat Last
+                        </button>
+                      </>
+                    ) : (
+                      <p className="previous-performance-empty">No previous performance found.</p>
                       )}
                     </motion.div>
                   )}
@@ -242,14 +340,21 @@ export function WorkoutForm({
                             time
                           </p>
                           <ul className="training-suggestion-sets">
-                            {trainingSuggestion.sets.map((set, setIndex) => (
-                              <li key={`${set.weight}-${set.reps}-${setIndex}`}>
-                                Set {setIndex + 1}: {formatSetSuggestion(set.weight, set.reps)}
-                              </li>
-                            ))}
-                          </ul>
-                        </>
-                      ) : (
+                          {trainingSuggestion.sets.map((set, setIndex) => (
+                            <li key={`${set.weight}-${set.reps}-${setIndex}`}>
+                              Set {setIndex + 1}: {formatSetSuggestion(set.weight, set.reps)}
+                            </li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          className="ghost-button card-action-button"
+                          onClick={() => replaceSetsFromPreset(exercise, trainingSuggestion.sets)}
+                        >
+                          Use Suggested
+                        </button>
+                      </>
+                    ) : (
                         <p className="training-suggestion-empty">{trainingSuggestion.message}</p>
                       )}
                     </motion.div>
@@ -260,25 +365,20 @@ export function WorkoutForm({
                   {exercise.sets.map((set, setIndex) => (
                     <div className="set-row" key={set.id}>
                       <span>Set {setIndex + 1}</span>
-                      <input
-                        type="number"
+                      <StepperInput
+                        inputStep="any"
+                        label="Weight"
                         placeholder="Weight"
-                        min="0"
-                        step="0.5"
+                        step={WEIGHT_STEP}
                         value={set.weight}
-                        onChange={(event) =>
-                          onSetFieldChange(exercise.id, set.id, "weight", event.target.value)
-                        }
+                        onChange={(value) => onSetFieldChange(exercise.id, set.id, "weight", value)}
                       />
-                      <input
-                        type="number"
+                      <StepperInput
+                        label="Reps"
                         placeholder="Reps"
-                        min="0"
-                        step="1"
+                        step={REPS_STEP}
                         value={set.reps}
-                        onChange={(event) =>
-                          onSetFieldChange(exercise.id, set.id, "reps", event.target.value)
-                        }
+                        onChange={(value) => onSetFieldChange(exercise.id, set.id, "reps", value)}
                       />
                       <button
                         type="button"

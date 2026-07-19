@@ -450,6 +450,23 @@ export function TrackerPage() {
     );
   };
 
+  const replaceExerciseSets = (exerciseId, nextSets) => {
+    setExercises((prev) =>
+      prev.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              sets: nextSets.map((set) => ({
+                id: crypto.randomUUID(),
+                weight: set.weight,
+                reps: set.reps,
+              })),
+            }
+          : exercise
+      )
+    );
+  };
+
   const removeSet = (exerciseId, setId) => {
     setExercises((prev) =>
       prev.map((exercise) => {
@@ -830,6 +847,7 @@ export function TrackerPage() {
         onWorkoutNotesChange={setWorkoutNotes}
         onExerciseNameChange={updateExerciseName}
         onSetFieldChange={updateSetField}
+        onReplaceExerciseSets={replaceExerciseSets}
         onAddExercise={addExercise}
         onRemoveExercise={removeExercise}
         onMoveExerciseUp={moveExerciseUp}

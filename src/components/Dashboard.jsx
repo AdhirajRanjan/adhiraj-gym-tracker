@@ -27,6 +27,7 @@ export function Dashboard({
   onWorkoutNotesChange,
   onExerciseNameChange,
   onSetFieldChange,
+  onReplaceExerciseSets,
   onAddExercise,
   onRemoveExercise,
   onMoveExerciseUp,
@@ -84,6 +85,7 @@ export function Dashboard({
                 onWorkoutNotesChange={onWorkoutNotesChange}
                 onExerciseNameChange={onExerciseNameChange}
                 onSetFieldChange={onSetFieldChange}
+                onReplaceExerciseSets={onReplaceExerciseSets}
                 onAddExercise={onAddExercise}
                 onRemoveExercise={onRemoveExercise}
                 onMoveExerciseUp={onMoveExerciseUp}
